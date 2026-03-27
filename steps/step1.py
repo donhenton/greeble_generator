@@ -18,32 +18,21 @@ import bpy
 import bmesh
 import mathutils
 import math
-
-# ---------------------------------------------------------------------------
-# TUNING CONSTANTS
-# ---------------------------------------------------------------------------
-
-GRID_DIVISIONS     = 10     # NxN grid subdivisions across the panel face
-BOX_EXTRUDE_DEPTH  = 0.08   # how deep boxes are recessed in -Z (Blender units)
-
-ATTRACTOR_COUNT    = 4      # attractors scattered across face per panel
-ATTRACTOR_STRENGTH = 1.2    # pull strength (inverse-square scale)
-REPELLER_STRENGTH  = 1.0    # push strength between box centres
-ITERATIONS         = 100    # max simulation steps
-CONVERGENCE_DELTA  = 0.0005 # stop early if max movement drops below this
-STEP_SIZE          = 0.04   # movement scale per iteration
-
-# Box size in grid cells (min/max span per axis)
-BOX_MIN_CELLS = 2           # minimum cells per box side
-BOX_MAX_CELLS = 4           # maximum cells per box side
-
-# Face area (Blender units²) → target box count
-AREA_BOX_COUNT = [
-    (0.0,  2),
-    (1.0,  3),
-    (2.5,  4),
-    (4.5,  5),
-]
+import sys, os
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+from config import (
+    GRID_DIVISIONS,
+    BOX_EXTRUDE_DEPTH,
+    ATTRACTOR_COUNT,
+    ATTRACTOR_STRENGTH,
+    REPELLER_STRENGTH,
+    ITERATIONS,
+    CONVERGENCE_DELTA,
+    STEP_SIZE,
+    BOX_MIN_CELLS,
+    BOX_MAX_CELLS,
+    AREA_BOX_COUNT,
+)
 
 
 # ---------------------------------------------------------------------------
