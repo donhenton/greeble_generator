@@ -3,7 +3,8 @@ steps/step3.py  —  STUB
 Connectors drawn between boxes on the same face,
 with random joint placement and decorative joint covers.
 
-All connectors stay coplanar with the panel face.
+Connectors run across the flat panel surface between box edges.
+All geometry stays coplanar with the panel face.
 
 NOT YET IMPLEMENTED.
 """
@@ -13,13 +14,12 @@ def run_step3(obj, bm, face, box_regions, rng, output_col):
     """
     Stub — connector geometry between box pairs.
 
-    Args:
-        obj         : Blender mesh object
-        bm          : BMesh (edit mode)
-        face        : selected BMesh face
-        box_regions : list of box dicts from Step 1
-        rng         : seeded Random instance
-        output_col  : Blender collection to place generated objects into
+    box_regions items: {
+        'floor_faces' : [BMFace, ...]
+        'rect'        : (r0,c0,r1,c1)
+        'normal'      : Vector
+        'depth'       : float
+    }
     """
     if len(box_regions) < 2:
         print("    [Step3] Fewer than 2 boxes — no connectors to draw.")
@@ -27,9 +27,9 @@ def run_step3(obj, bm, face, box_regions, rng, output_col):
 
     print(f"    [Step3] STUB — {len(box_regions)} boxes ready for connector pass.")
     # TODO:
-    # 1. Determine box pairs to connect (not necessarily all pairs)
+    # 1. Determine which box pairs to connect
     # 2. For each pair:
-    #    a. Draw connector geometry between box edges (tube / cable / conduit)
-    #    b. Place random joint objects along connector length
+    #    a. Route connector across panel surface between box edges
+    #    b. Place random joint objects along connector
     #    c. Add joint cover objects at joint positions
-    # 3. Place all geometry into output_col
+    # 3. All geometry into output_col

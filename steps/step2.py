@@ -1,10 +1,9 @@
 """
 steps/step2.py  —  STUB
 Growth-front diffusion scatter of flat objects from GREEBLE2 collection
-across each box floor.
+across the floor of each recessed box.
 
-Object count scales with box area (soft cap ~10-15 per box).
-Seed point derived from Step 1 attractor data.
+Object count scales with box floor area (soft cap ~10-15 per box).
 Overlap between objects is permitted.
 
 NOT YET IMPLEMENTED.
@@ -15,15 +14,14 @@ GREEBLE2_COLLECTION = "GREEBLE2"
 
 def run_step2(obj, bm, face, box_regions, rng, output_col):
     """
-    Stub — growth-front diffusion scatter inside each box region.
+    Stub — growth-front diffusion scatter on box floors.
 
-    Args:
-        obj         : Blender mesh object
-        bm          : BMesh (edit mode)
-        face        : selected BMesh face
-        box_regions : list of box dicts from Step 1
-        rng         : seeded Random instance
-        output_col  : Blender collection to place generated objects into
+    box_regions items: {
+        'floor_faces' : [BMFace, ...]   — floor of the recessed box
+        'rect'        : (r0,c0,r1,c1)  — grid cell rect
+        'normal'      : Vector
+        'depth'       : float
+    }
     """
     import bpy
 
@@ -35,12 +33,13 @@ def run_step2(obj, bm, face, box_regions, rng, output_col):
         print(f"    [Step2] WARNING: '{GREEBLE2_COLLECTION}' is empty — skipping.")
         return
 
-    print(f"    [Step2] STUB — {len(box_regions)} boxes ready for growth diffusion scatter.")
+    print(f"    [Step2] STUB — {len(box_regions)} box floors ready for growth diffusion scatter.")
     # TODO:
     # 1. For each box_region:
-    #    a. Calculate object count from box area (scale ~10-15, soft cap)
-    #    b. Seed growth front from attractor data (box uv_center as initial seed)
-    #    c. Iteratively place objects adjacent to existing placements
-    #    d. Pick objects randomly from GREEBLE2 collection (rng)
-    #    e. Place flush on box floor, random Z rotation
-    #    f. Instance into output_col
+    #    a. Compute floor area from floor_faces
+    #    b. Scale object count to area (soft cap ~10-15)
+    #    c. Seed growth front from box centre
+    #    d. Iteratively place objects adjacent to existing placements
+    #    e. Pick objects randomly from GREEBLE2 (rng)
+    #    f. Place flush on floor face, random Z rotation
+    #    g. Instance into output_col

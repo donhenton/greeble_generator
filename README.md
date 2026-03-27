@@ -1,4 +1,4 @@
-# Greeble Generator — v03
+# Greeble Generator — v04
 
 Blender 4.x | Batch Production Pipeline | Asset Library Output
 
@@ -87,7 +87,7 @@ Note it down if you produce a batch you want to reproduce later.
 
 | Step | Status | Notes |
 |------|--------|-------|
-| Step 1 — Box placement | ✅ Implemented | Attractor/repeller sim |
+| Step 1 — Box placement | ✅ Implemented | Grid subdivision + attractor/repeller + -Z extrusion |
 | Step 2 — Box greeble fill | 🔲 Stub | Growth diffusion model |
 | Step 3 — Connectors | 🔲 Stub | Coplanar, joint covers |
 | Step 4 — Interstitial scatter | 🔲 Stub | Overlaps Step 3 intentionally |
