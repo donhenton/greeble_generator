@@ -286,8 +286,13 @@ def resolve_box_rects(positions, rng, n_rows, n_cols, max_attempts=20):
 
 def extrude_box(bm, grid, rect, normal, depth):
     """
-    Select all faces in the grid rectangle and extrude them in -Z (into panel).
-    Returns the list of new bottom faces (floor of the recessed box).
+    Extrude the rectangle of grid faces as a single region into the panel (-Z),
+    then delete the original top faces to leave an open tray.
+
+    Result: four clean walls + one flat floor, open at the top —
+    a recessed tray ready for Step 2 greeble fill.
+
+    Returns the floor faces (bottom of the tray).
     """
     row_start, col_start, row_end, col_end = rect
 
@@ -303,21 +308,22 @@ def extrude_box(bm, grid, rect, normal, depth):
 
     extrude_vec = -normal.normalized() * depth
 
-    # extrude_face_region treats all faces as a connected region —
-    # interior shared edges are dissolved, giving one flat floor
-    # and four clean perimeter walls, not individual pockets.
-    ret = bmesh.ops.extrude_face_region(bm, geom=faces_to_extrude)
+    # Extrude as a single connected region — one floor, four walls
+    ret      = bmesh.ops.extrude_face_region(bm, geom=faces_to_extrude)
+    new_geom = ret['geom']
 
-    # Collect new geometry produced by the extrusion
-    new_geom  = ret['geom']
     new_faces = [g for g in new_geom if isinstance(g, bmesh.types.BMFace)]
     new_verts = [g for g in new_geom if isinstance(g, bmesh.types.BMVert)]
 
-    # Translate the new geometry into the panel (-Z)
+    # Push new geometry down into the panel
     bmesh.ops.translate(bm, vec=extrude_vec, verts=new_verts)
 
-    # Floor faces are those whose normal still matches the panel normal
-    # (wall faces point sideways)
+    # Delete the original top faces — they cap the tray and must be removed
+    # so the recess is open at the panel surface level
+    bmesh.ops.delete(bm, geom=faces_to_extrude, context='FACES')
+
+    # Floor faces: new faces whose normal matches the panel normal
+    # (wall faces point sideways, floor points same way as panel)
     floor_faces = [
         f for f in new_faces
         if f.normal.dot(normal) > 0.9
