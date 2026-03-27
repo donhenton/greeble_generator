@@ -90,38 +90,43 @@ def compute_panel_position(panel_count, ratio_name, width, height):
     return x, y
 
 
-def finalise_panel(base_obj, output_col, panel_name, batch_seed, panel_seed,
-                   layout_x=0.0, layout_y=0.0):
+def finalise_panel(base_obj, staging_col, output_col, panel_name,
+                   batch_seed, panel_seed, layout_x=0.0, layout_y=0.0):
     """
-    Join all objects in output_col together with the base quad into
-    a single named panel mesh object, then position it in the layout grid.
+    Join all objects in staging_col (this panel only) with the base quad
+    into a single named mesh object, then move it into output_col.
+
+    Using a per-panel staging collection ensures the join only touches
+    this panel's geometry — not panels already sitting in GREEBLE_OUTPUT.
 
     Steps:
       1. Exit edit mode
-      2. Link base_obj into output_col
-      3. Select all objects in output_col, make base_obj active
-      4. Join into one mesh (inherits base_obj coordinate space)
-      5. Set origin to bounding box centre (back face centre for flat panel)
+      2. Link base_obj into staging_col
+      3. Select all objects in staging_col, make base_obj active
+      4. Join into one mesh
+      5. Set origin to bounding box centre (back face centre)
       6. Move to layout position
       7. Rename object and mesh data
-      8. Mark as Blender asset with metadata description
+      8. Move from staging_col into output_col (GREEBLE_OUTPUT)
+      9. Remove staging_col (now empty)
+     10. Mark as Blender asset
     """
     bpy.ops.object.mode_set(mode='OBJECT')
 
-    # Move base quad into output collection
+    # Link base quad into this panel's staging collection
     for c in base_obj.users_collection:
         c.objects.unlink(base_obj)
-    output_col.objects.link(base_obj)
+    staging_col.objects.link(base_obj)
 
-    # Select everything in the output collection
+    # Select only this panel's objects
     bpy.ops.object.select_all(action='DESELECT')
-    for o in output_col.objects:
+    for o in staging_col.objects:
         o.select_set(True)
 
     # Base quad active — join inherits its coordinate space
     bpy.context.view_layer.objects.active = base_obj
 
-    if len(output_col.objects) > 1:
+    if len(list(staging_col.objects)) > 1:
         bpy.ops.object.join()
 
     panel_obj           = bpy.context.active_object
@@ -136,11 +141,19 @@ def finalise_panel(base_obj, output_col, panel_name, batch_seed, panel_seed,
     panel_obj.location.y = layout_y
     panel_obj.location.z = 0.0
 
+    # Move panel from staging into GREEBLE_OUTPUT
+    for c in panel_obj.users_collection:
+        c.objects.unlink(panel_obj)
+    output_col.objects.link(panel_obj)
+
+    # Clean up empty staging collection
+    bpy.data.collections.remove(staging_col)
+
     # Mark as Blender asset
     panel_obj.asset_mark()
     panel_obj.asset_data.description = (
         f"{panel_name} | batch_seed={batch_seed} | panel_seed={panel_seed}"
     )
 
-    print(f"    [Panel] '{panel_name}' → ({layout_x:.2f}, {layout_y:.2f}), asset marked.")
+    print(f"    [Panel] '{panel_name}' -> ({layout_x:.2f}, {layout_y:.2f}), asset marked.")
     return panel_obj

@@ -55,8 +55,8 @@ MIN_BOX_SIZE = 0.15
 GREEBLE2_COLLECTION = "GREEBLE2"   # flat objects for box floors (Step 2)
 GREEBLE4_COLLECTION = "GREEBLE4"   # interstitial objects for negative space (Step 4)
 
-# Output collection prefix — auto-incremented per batch
-OUTPUT_PREFIX = "GREEBLE_OUTPUT_"
+# Single output collection — all panels land here
+OUTPUT_COLLECTION = "GREEBLE_OUTPUT"
 
 # Material applied to the base quad back face
 # Create a material with this exact name in your production scene

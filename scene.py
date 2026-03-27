@@ -7,13 +7,13 @@ import bpy
 from config import (
     GREEBLE2_COLLECTION,
     GREEBLE4_COLLECTION,
-    OUTPUT_PREFIX,
+    OUTPUT_COLLECTION,
 )
 
 
 def clear_scene():
     """
-    Remove all objects and all GREEBLE_OUTPUT_ collections from the scene.
+    Remove all objects and the GREEBLE_OUTPUT collection from the scene.
     Preserves GREEBLE2 and GREEBLE4 collections and their contents.
     Called at the start of run_batch() when DEBUG_MODE is True.
     """
@@ -33,10 +33,10 @@ def clear_scene():
         if o.name not in protected_objects:
             bpy.data.objects.remove(o, do_unlink=True)
 
-    # Remove all GREEBLE_OUTPUT_ collections
-    for col in list(bpy.data.collections):
-        if col.name.startswith(OUTPUT_PREFIX):
-            bpy.data.collections.remove(col)
+    # Remove GREEBLE_OUTPUT collection if it exists
+    col = bpy.data.collections.get(OUTPUT_COLLECTION)
+    if col:
+        bpy.data.collections.remove(col)
 
     print("  [Scene] Cleared — GREEBLE2 and GREEBLE4 preserved.")
 
@@ -58,42 +58,30 @@ def validate_collections():
     return ok
 
 
-def get_next_output_index():
+def get_or_create_output_collection(batch_seed, timestamp):
     """
-    Scan existing collections for OUTPUT_PREFIX and return next increment.
-    e.g. if GREEBLE_OUTPUT_01 and _02 exist, returns 3.
+    Find or create the single GREEBLE_OUTPUT collection.
+    Tags it with batch metadata. Returns the collection.
     """
-    existing = [
-        c.name for c in bpy.data.collections
-        if c.name.startswith(OUTPUT_PREFIX)
-    ]
-    if not existing:
-        return 1
-    indices = []
-    for name in existing:
-        suffix = name[len(OUTPUT_PREFIX):]
-        if suffix.isdigit():
-            indices.append(int(suffix))
-    return max(indices) + 1 if indices else 1
+    col = bpy.data.collections.get(OUTPUT_COLLECTION)
+    if col is None:
+        col = bpy.data.collections.new(OUTPUT_COLLECTION)
+        bpy.context.scene.collection.children.link(col)
+
+    col['greeble_batch_seed'] = batch_seed
+    col['greeble_timestamp']  = timestamp
+    col['greeble_sources']    = f"{GREEBLE2_COLLECTION}, {GREEBLE4_COLLECTION}"
+
+    return col
 
 
-def create_output_collection(index, panel_name, source_meta):
+def create_staging_collection(panel_name):
     """
-    Create a numbered output collection tagged with source metadata.
-    Returns the collection.
+    Create a temporary per-panel staging collection.
+    Steps deposit geometry here during the pipeline run.
+    finalise_panel() joins everything in it, then removes it.
     """
-    col_name = f"{OUTPUT_PREFIX}{index:02d}"
-    col = bpy.data.collections.new(col_name)
+    name = f"_staging_{panel_name}"
+    col  = bpy.data.collections.new(name)
     bpy.context.scene.collection.children.link(col)
-
-    col['greeble_panel_name']  = panel_name
-    col['greeble_batch_seed']  = source_meta['batch_seed']
-    col['greeble_panel_seed']  = source_meta['panel_seed']
-    col['greeble_panel_index'] = source_meta['panel_index']
-    col['greeble_ratio']       = source_meta['ratio']
-    col['greeble_collections'] = (
-        f"{GREEBLE2_COLLECTION}, {GREEBLE4_COLLECTION}"
-    )
-    col['greeble_timestamp']   = source_meta['timestamp']
-
     return col

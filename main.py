@@ -32,14 +32,14 @@ from config import (
     DEBUG_MODE,
     PANELS_PER_RATIO,
     PANEL_SIZES,
-    OUTPUT_PREFIX,
+    OUTPUT_COLLECTION,
     MIN_BOX_SIZE,
 )
 from scene  import (
     clear_scene,
     validate_collections,
-    get_next_output_index,
-    create_output_collection,
+    get_or_create_output_collection,
+    create_staging_collection,
 )
 from panel  import create_panel_quad, compute_panel_position, finalise_panel
 from steps.step1 import run_step1
@@ -52,20 +52,20 @@ from steps.step4 import run_step4
 # PIPELINE
 # ---------------------------------------------------------------------------
 
-def run_pipeline(obj, bm, face, panel_seed, output_col):
-    """Run all four steps on a single panel face."""
+def run_pipeline(obj, bm, face, panel_seed, staging_col):
+    """Run all four steps on a single panel face. Geometry goes into staging_col."""
     rng = random.Random(panel_seed)
 
     box_regions, negative_space = run_step1(obj, bm, face, rng, MIN_BOX_SIZE)
     print(f"    [Step1] {len(box_regions)} boxes placed.")
 
-    run_step2(obj, bm, face, box_regions, rng, output_col)
+    run_step2(obj, bm, face, box_regions, rng, staging_col)
     print("    [Step2] done.")
 
-    run_step3(obj, bm, face, box_regions, rng, output_col)
+    run_step3(obj, bm, face, box_regions, rng, staging_col)
     print("    [Step3] done.")
 
-    run_step4(obj, bm, face, negative_space, rng, output_col)
+    run_step4(obj, bm, face, negative_space, rng, staging_col)
     print("    [Step4] done.")
 
 
@@ -90,31 +90,20 @@ def run_batch():
 
     validate_collections()
 
-    timestamp   = time.strftime("%Y-%m-%d %H:%M:%S")
-    start_index = get_next_output_index()
-    panel_count = 0
+    timestamp    = time.strftime("%Y-%m-%d %H:%M:%S")
+    output_col   = get_or_create_output_collection(batch_seed, timestamp)
+    panel_count  = 0
 
     for ratio_name, (width, height) in PANEL_SIZES.items():
         print(f"\n--- Ratio: {ratio_name} ({width} x {height}) ---")
 
         for i in range(PANELS_PER_RATIO):
-            panel_index  = panel_count + 1
-            output_index = start_index + panel_count
-            panel_seed   = batch_seed + panel_count
+            panel_index = panel_count + 1
+            panel_seed  = batch_seed + panel_count
             panel_name   = f"GreeblePanel_{ratio_name}_{i+1:02d}"
 
             print(f"\n  Panel {panel_index:02d}/{PANELS_PER_RATIO * len(PANEL_SIZES)} "
                   f"— {panel_name}  (seed={panel_seed})")
-
-            # Create output collection with metadata
-            meta = {
-                'batch_seed'  : batch_seed,
-                'panel_seed'  : panel_seed,
-                'panel_index' : output_index,
-                'ratio'       : ratio_name,
-                'timestamp'   : timestamp,
-            }
-            output_col = create_output_collection(output_index, panel_name, meta)
 
             # Layout position — non-overlapping grid
             layout_x, layout_y = compute_panel_position(
@@ -124,12 +113,15 @@ def run_batch():
             # Create base quad
             base_obj, bm, face = create_panel_quad(ratio_name, width, height)
 
-            # Run pipeline — steps deposit geometry into output_col
-            run_pipeline(base_obj, bm, face, panel_seed, output_col)
+            # Per-panel staging collection — isolates this panel's geometry
+            staging_col = create_staging_collection(panel_name)
 
-            # Join everything into one named asset object
+            # Run pipeline — steps deposit geometry into staging_col
+            run_pipeline(base_obj, bm, face, panel_seed, staging_col)
+
+            # Join staging_col + base quad into one object, move to output_col
             finalise_panel(
-                base_obj, output_col, panel_name,
+                base_obj, staging_col, output_col, panel_name,
                 batch_seed, panel_seed,
                 layout_x, layout_y
             )
@@ -139,8 +131,7 @@ def run_batch():
 
     print(f"\n{'='*60}")
     print(f"  Batch complete — {panel_count} panels generated.")
-    print(f"  Collections: {OUTPUT_PREFIX}{start_index:02d} "
-          f"to {OUTPUT_PREFIX}{start_index + panel_count - 1:02d}")
+    print(f"  Collection: {OUTPUT_COLLECTION}")
     print(f"  BATCH_SEED was: {batch_seed}")
     print(f"{'='*60}\n")
 
