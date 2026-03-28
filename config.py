@@ -98,8 +98,19 @@ AREA_BOX_COUNT = [
 # ---------------------------------------------------------------------------
 
 # Active Step 2 algorithm — must match a key in the step2 registry
-# Available: "growth_front", "poisson" (stub)
-STEP2_ALGORITHM = "growth_front"
+# Available: "growth_front", "poisson" (stub), "ca"
+STEP2_ALGORITHM = "ca"
+
+# Active CA rule — only used when STEP2_ALGORITHM = "ca"
+# Available: "conway", "maze", "coral"
+CA_RULE = "conway"
+
+# CA simulation settings
+CA_GENERATIONS   = 3      # iterations before reading alive cells
+CA_SEED_DENSITY  = 0.85   # fraction of cells alive at start (0.0-1.0)
+# Grid resolution multiplier relative to GRID_DIVISIONS
+# 2 = twice the Step 1 grid resolution across the box floor
+CA_RESOLUTION_MULTIPLIER = 1
 
 # Object count scaling — count = clamp(int(floor_area / DENSITY), MIN, MAX)
 STEP2_DENSITY     = 0.08    # floor area per object (lower = more objects)

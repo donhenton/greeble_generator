@@ -22,6 +22,7 @@ from config import GREEBLE2_COLLECTION, STEP2_ALGORITHM
 # Algorithm imports
 from steps.step2_algorithms import growth_front
 from steps.step2_algorithms import poisson
+from steps.step2_algorithms import ca
 
 # ---------------------------------------------------------------------------
 # REGISTRY — maps config name → algorithm module
@@ -30,6 +31,7 @@ from steps.step2_algorithms import poisson
 REGISTRY = {
     "growth_front" : growth_front,
     "poisson"      : poisson,
+    "ca"           : ca,
 }
 
 
