@@ -92,3 +92,24 @@ AREA_BOX_COUNT = [
     (2.5,  4),
     (4.5,  5),
 ]
+
+# ---------------------------------------------------------------------------
+# STEP 2 TUNING
+# ---------------------------------------------------------------------------
+
+# Object count scaling — count = clamp(int(floor_area / DENSITY), MIN, MAX)
+#STEP2_DENSITY     = 0.08    # floor area per object (lower = more objects)
+#STEP2_MIN_OBJECTS = 5       # minimum objects per box regardless of area
+#STEP2_MAX_OBJECTS = 15      # maximum objects per box regardless of area
+
+## Growth front step distance — how far each new object steps from an existing one
+#STEP2_GROWTH_STEP = 0.25    # Blender units
+
+
+# Object count scaling — count = clamp(int(floor_area / DENSITY), MIN, MAX)
+STEP2_DENSITY     = 0.04    # floor area per object (lower = more objects)
+STEP2_MIN_OBJECTS = 25       # minimum objects per box regardless of area
+STEP2_MAX_OBJECTS = 18      # maximum objects per box regardless of area
+
+# Growth front step distance — how far each new object steps from an existing one
+STEP2_GROWTH_STEP = 0.12    # Blender units
