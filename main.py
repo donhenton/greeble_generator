@@ -56,15 +56,19 @@ def run_pipeline(obj, bm, face, panel_seed, staging_col):
     """Run all four steps on a single panel face. Geometry goes into staging_col."""
     rng = random.Random(panel_seed)
 
+    # Step 1 — box placement and extrusion
     box_regions, negative_space = run_step1(obj, bm, face, rng, MIN_BOX_SIZE)
     print(f"    [Step1] {len(box_regions)} boxes placed.")
 
+    # Step 2 — greeble scatter on box floors
     run_step2(obj, bm, face, box_regions, rng, staging_col)
     print("    [Step2] done.")
 
+    # Step 3 — scoring marks
     run_step3(obj, bm, face, box_regions, rng, staging_col)
     print("    [Step3] done.")
 
+    # Step 4 — interstitial scatter
     run_step4(obj, bm, face, negative_space, rng, staging_col)
     print("    [Step4] done.")
 

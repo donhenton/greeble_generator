@@ -54,7 +54,8 @@ def create_panel_quad(ratio_name, width, height):
 
     # Set origin to geometry centre (back face centre at Z=0)
     bpy.ops.object.mode_set(mode='OBJECT')
-    bpy.ops.object.select_all(action='DESELECT')
+    for o in bpy.context.selected_objects:
+        o.select_set(False)
     obj.select_set(True)
     bpy.context.view_layer.objects.active = obj
     bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='BOUNDS')
@@ -119,7 +120,8 @@ def finalise_panel(base_obj, staging_col, output_col, panel_name,
     staging_col.objects.link(base_obj)
 
     # Select only this panel's objects
-    bpy.ops.object.select_all(action='DESELECT')
+    for o in bpy.context.selected_objects:
+        o.select_set(False)
     for o in staging_col.objects:
         o.select_set(True)
 

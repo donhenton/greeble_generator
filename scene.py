@@ -27,8 +27,7 @@ def clear_scene():
             for o in col.objects:
                 protected_objects.add(o.name)
 
-    # Delete all unprotected objects
-    bpy.ops.object.select_all(action='DESELECT')
+    # Delete all unprotected objects directly — no bpy.ops needed
     for o in list(bpy.data.objects):
         if o.name not in protected_objects:
             bpy.data.objects.remove(o, do_unlink=True)

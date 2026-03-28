@@ -401,11 +401,17 @@ def run_step1(obj, bm, face, rng, min_box_size):
                 for col in range(col_start, col_end):
                     box_cell_set.add((row, col))
 
+            # Store face indices alongside face refs —
+            # indices survive mode switches; refs do not
+            bm.faces.ensure_lookup_table()
+            floor_indices = [f.index for f in floor_faces]
+
             box_regions.append({
-                'floor_faces': floor_faces,
-                'rect'       : rect,
-                'normal'     : normal.copy(),
-                'depth'      : BOX_EXTRUDE_DEPTH,
+                'floor_faces'  : floor_faces,
+                'floor_indices': floor_indices,
+                'rect'         : rect,
+                'normal'       : normal.copy(),
+                'depth'        : BOX_EXTRUDE_DEPTH,
             })
 
     # --- Collect remaining flat faces as negative space ---
