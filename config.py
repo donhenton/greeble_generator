@@ -99,15 +99,15 @@ AREA_BOX_COUNT = [
 
 # Active Step 2 algorithm — must match a key in the step2 registry
 # Available: "growth_front", "poisson" (stub), "ca"
-STEP2_ALGORITHM = "growth_front"
+STEP2_ALGORITHM = "ca"
 
 # Active CA rule — only used when STEP2_ALGORITHM = "ca"
 # Available: "conway", "maze", "coral"
-CA_RULE = "conway"
+CA_RULE = "maze"
 
 # CA simulation settings
-CA_GENERATIONS   = 8      # iterations before reading alive cells
-CA_SEED_DENSITY  = 0.45   # fraction of cells alive at start (0.0-1.0)
+CA_GENERATIONS   = 4     # iterations before reading alive cells
+CA_SEED_DENSITY  = 0.35   # fraction of cells alive at start (0.0-1.0)
 # Grid resolution multiplier relative to GRID_DIVISIONS
 # 2 = twice the Step 1 grid resolution across the box floor
 CA_RESOLUTION_MULTIPLIER = 2
