@@ -1,42 +1,44 @@
 """
 steps/step2.py
-Growth-front diffusion scatter of flat objects from GREEBLE2 collection
-across the floor of each recessed box.
+Dispatcher for Step 2 scatter algorithms.
 
-- Objects are linked copies (shared mesh data, independent transforms)
-- Object origin placed directly on floor face world position
-- No rotation or scale applied — user bakes variation into collection objects
-- Count scales softly with box floor area
-- Growth front seeds from box centre, spreads outward organically
-- Overlap between objects is permitted
-- Panel is always XY-parallel so no normal alignment needed
+Shared helpers live here — all algorithm modules import them from this file.
+The active algorithm is set by STEP2_ALGORITHM in config.py.
+
+To add a new algorithm:
+  1. Create steps/step2_algorithms/my_algo.py with a run() function
+  2. Import it below and add to REGISTRY
+  3. Set STEP2_ALGORITHM = "my_algo" in config.py
 """
 
 import bpy
-import math
-import random
+import mathutils
 import sys
 import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from config import (
-    GREEBLE2_COLLECTION,
-    STEP2_DENSITY,
-    STEP2_MIN_OBJECTS,
-    STEP2_MAX_OBJECTS,
-    STEP2_GROWTH_STEP,
-)
+from config import GREEBLE2_COLLECTION, STEP2_ALGORITHM
+
+# Algorithm imports
+from steps.step2_algorithms import growth_front
+from steps.step2_algorithms import poisson
+
+# ---------------------------------------------------------------------------
+# REGISTRY — maps config name → algorithm module
+# ---------------------------------------------------------------------------
+
+REGISTRY = {
+    "growth_front" : growth_front,
+    "poisson"      : poisson,
+}
 
 
 # ---------------------------------------------------------------------------
-# HELPERS
+# SHARED HELPERS — used by all algorithm modules
 # ---------------------------------------------------------------------------
 
 def get_greeble2_objects():
-    """
-    Return list of objects from GREEBLE2 collection.
-    Returns empty list with warning if collection missing or empty.
-    """
+    """Return objects from GREEBLE2 collection, or [] with warning."""
     col = bpy.data.collections.get(GREEBLE2_COLLECTION)
     if col is None:
         print(f"    [Step2] WARNING: '{GREEBLE2_COLLECTION}' not found — skipping.")
@@ -48,18 +50,9 @@ def get_greeble2_objects():
 
 
 def compute_floor_centre(floor_faces):
-    """
-    Return the average world-space centre of all floor faces.
-    This is the growth front seed position.
-    """
+    """Return average world-space centre of all floor faces."""
     if not floor_faces:
         return None
-    total = sum(
-        (f.calc_center_median() for f in floor_faces),
-        start=floor_faces[0].calc_center_median() * 0
-    )
-    # Use mathutils Vector accumulation
-    import mathutils
     acc = mathutils.Vector((0.0, 0.0, 0.0))
     for f in floor_faces:
         acc += f.calc_center_median()
@@ -71,109 +64,45 @@ def compute_floor_area(floor_faces):
     return sum(f.calc_area() for f in floor_faces)
 
 
-def compute_object_count(floor_area):
-    """Scale object count to floor area, clamped to min/max."""
-    count = int(floor_area / STEP2_DENSITY)
-    return max(STEP2_MIN_OBJECTS, min(STEP2_MAX_OBJECTS, count))
-
-
-def place_linked_copy(source_obj, location, staging_col):
+def place_copy(source_obj, location, staging_col):
     """
-    Create a copy of source_obj placed at location and add to staging_col.
-
-    Uses source_obj.copy() so the source object's transform (scale, rotation)
-    is preserved correctly regardless of where the source lives in world space.
-    The location is then overridden to the target floor position.
-    Mesh data is shared — no full mesh duplication.
+    Create a copy of source_obj at location and link into staging_col.
+    Uses source_obj.copy() so transform (scale, rotation) is preserved
+    regardless of where the source lives in world space.
+    Mesh data is shared — no full duplication.
     """
-    new_obj          = source_obj.copy()   # shared mesh data, correct transform
+    new_obj          = source_obj.copy()
     new_obj.name     = f"GR2_{source_obj.name}"
-    new_obj.location = location.copy()     # place at floor position
-    new_obj.location.z = location.z        # lock Z to floor level
+    new_obj.location = location.copy()
+    new_obj.location.z = location.z
     staging_col.objects.link(new_obj)
     return new_obj
 
 
 # ---------------------------------------------------------------------------
-# GROWTH FRONT
-# ---------------------------------------------------------------------------
-
-def growth_front_positions(seed_pos, count, rng):
-    """
-    Generate `count` positions using a growth-front model.
-
-    Starting from seed_pos, each new position steps outward from a
-    randomly chosen existing position by STEP2_GROWTH_STEP in a random
-    XY direction. Z stays fixed to the seed Z (floor level).
-
-    Returns list of (x, y, z) positions.
-    """
-    positions = [seed_pos.copy()]
-
-    for _ in range(count - 1):
-        # Pick a random existing position to grow from
-        base = rng.choice(positions)
-
-        # Random angle in XY plane
-        angle = rng.uniform(0, math.pi * 2)
-        # Random step distance with some jitter
-        dist  = STEP2_GROWTH_STEP * rng.uniform(0.6, 1.4)
-
-        import mathutils
-        new_pos = mathutils.Vector((
-            base.x + math.cos(angle) * dist,
-            base.y + math.sin(angle) * dist,
-            seed_pos.z,                         # always on the floor
-        ))
-        positions.append(new_pos)
-
-    return positions
-
-
-# ---------------------------------------------------------------------------
-# PUBLIC API
+# DISPATCHER
 # ---------------------------------------------------------------------------
 
 def run_step2(obj, bm, face, box_regions, rng, staging_col):
     """
-    Scatter flat GREEBLE2 objects across each box floor using
-    a growth-front diffusion model.
-
-    Args:
-        obj         : Blender mesh object (panel)
-        bm          : BMesh in edit mode
-        face        : selected panel BMFace
-        box_regions : list of dicts from Step 1, each with 'floor_faces'
-        rng         : seeded Random instance
-        staging_col : per-panel staging collection
+    Dispatch to the active Step 2 algorithm as set by STEP2_ALGORITHM
+    in config.py.
     """
     source_objects = get_greeble2_objects()
     if not source_objects:
         return
 
-    total_placed = 0
+    algo = REGISTRY.get(STEP2_ALGORITHM)
+    if algo is None:
+        print(f"    [Step2] ERROR: unknown algorithm '{STEP2_ALGORITHM}'. "
+              f"Available: {list(REGISTRY.keys())}")
+        return
 
-    for box in box_regions:
-        floor_faces = box.get('floor_faces', [])
-        if not floor_faces:
-            continue
+    print(f"    [Step2] Algorithm: {STEP2_ALGORITHM}")
 
-        floor_centre = compute_floor_centre(floor_faces)
-        if floor_centre is None:
-            continue
-
-        floor_area   = compute_floor_area(floor_faces)
-        count        = compute_object_count(floor_area)
-
-        print(f"    [Step2] Box floor area={floor_area:.4f} → {count} objects")
-
-        # Generate growth-front positions
-        positions = growth_front_positions(floor_centre, count, rng)
-
-        # Place a linked copy at each position
-        for pos in positions:
-            source = rng.choice(source_objects)
-            place_linked_copy(source, pos, staging_col)
-            total_placed += 1
+    total_placed = algo.run(
+        box_regions, rng, staging_col, source_objects,
+        compute_floor_centre, compute_floor_area, place_copy
+    )
 
     print(f"    [Step2] {total_placed} objects placed across {len(box_regions)} boxes.")
