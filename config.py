@@ -121,11 +121,16 @@ STEP2_MAX_OBJECTS = 15      # maximum objects per box regardless of area
 STEP2_GROWTH_STEP = 0.25    # Blender units
 
 # ---------------------------------------------------------------------------
-# STEP 3 — SCORING MARKS
+# STEP 3 — SUB-PANEL EXTRUSIONS
 # ---------------------------------------------------------------------------
 
-SCORE_CUTS_X       = 6      # number of X-direction cut lines
-SCORE_CUTS_Y       = 5      # number of Y-direction cut lines
-SCORE_IRREGULARITY = 0.35   # cut line irregularity (0.0=uniform, 1.0=chaotic)
-SCORE_DEPTH        = 0.02   # groove depth in -Z (Blender units)
-SCORE_WIDTH        = 0.03   # groove width — paired cut separation (Blender units)
+# Preset extrusion depths — positive only (+Z proud)
+# Sub-panels are always raised to avoid competing with recessed boxes
+PANEL_DEPTHS    = [0.02, 0.04, 0.06, 0.08]
+
+# Fraction of negative space cells that receive a sub-panel (0.0-1.0)
+PANEL_COVERAGE  = 0.6
+
+# Sub-panel rectangle size in grid cells per side (min/max)
+PANEL_MIN_CELLS = 2
+PANEL_MAX_CELLS = 4

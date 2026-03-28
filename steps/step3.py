@@ -1,157 +1,127 @@
 """
 steps/step3.py
-Scoring marks — shallow grooves cut across the negative space of the panel.
+Sub-panel extrusions in the negative space.
 
-Approach:
-  - Generate non-uniform cut line pairs in both X and Y directions
-    across the full panel bounds (edge-to-edge)
-  - Use bmesh.ops.bisect_plane to slice negative space faces along each line
-  - Each scoring mark is a paired bisect (two parallel cuts = thin strip)
-  - Extrude the thin strip faces in -Z to create a visible groove
-  - Box faces are untouched — recesses interrupt grooves naturally
+Groups negative space grid cells into random rectangles and extrudes
+each as a unit — some recessed (-Z), some proud (+Z) — using preset
+discrete depths. Produces a layered, multi-level panel surface appearance.
 
-All cut positions are seeded per-panel for variety across the library.
-Panel is always XY-parallel so no normal alignment needed.
+Uses the same extrude_face_region pattern as Step 1.
+Recessed panels: top faces deleted (open recess).
+Proud panels: top faces kept (raised platform).
 """
 
 import bpy
 import bmesh
 import mathutils
-import random
 import sys
 import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from config import (
-    SCORE_CUTS_X,
-    SCORE_CUTS_Y,
-    SCORE_IRREGULARITY,
-    SCORE_DEPTH,
-    SCORE_WIDTH,
+    PANEL_DEPTHS,
+    PANEL_COVERAGE,
+    PANEL_MIN_CELLS,
+    PANEL_MAX_CELLS,
 )
 
 
 # ---------------------------------------------------------------------------
-# CUT LINE GENERATION  (adapted from geometry.py)
+# RECTANGLE HELPERS  (reused pattern from step1)
 # ---------------------------------------------------------------------------
 
-def generate_cut_positions(total, n_cuts, irregularity, rng):
-    """
-    Generate n_cuts non-uniform cut positions across a span of `total` units.
-    Returns list of floats, each representing one cut line position.
-    Adapted from generate_cuts() in the reference geometry.py.
-    """
-    base_step = total / (n_cuts + 1)
-    positions = []
-    for i in range(1, n_cuts + 1):
-        base   = i * base_step
-        offset = rng.uniform(
-            -irregularity * base_step,
-             irregularity * base_step
-        )
-        pos = base + offset
-        # Keep within bounds with margin
-        pos = max(base_step * 0.2, min(total - base_step * 0.2, pos))
-        positions.append(pos)
-    return positions
+def clamp(val, lo, hi):
+    return max(lo, min(hi, val))
 
 
-def make_groove_pairs(positions, origin, half_width):
-    """
-    Convert cut positions to paired cut lines (each groove = two parallel cuts).
-    Returns list of (cut_a, cut_b) pairs in world space, offset from origin.
-    """
-    pairs = []
-    for pos in positions:
-        cut_a = origin + pos - half_width
-        cut_b = origin + pos + half_width
-        pairs.append((cut_a, cut_b))
-    return pairs
+def pick_rect(center_key, rng, n_rows, n_cols):
+    """Pick a random rectangle of cells centred approximately on center_key."""
+    row, col = center_key
+    w = rng.randint(PANEL_MIN_CELLS, PANEL_MAX_CELLS)
+    h = rng.randint(PANEL_MIN_CELLS, PANEL_MAX_CELLS)
+
+    col_start = clamp(int(col - w / 2.0), 0, n_cols - w)
+    row_start = clamp(int(row - h / 2.0), 0, n_rows - h)
+    col_end   = col_start + w
+    row_end   = row_start + h
+
+    return row_start, col_start, row_end, col_end
 
 
-# ---------------------------------------------------------------------------
-# PANEL BOUNDS
-# ---------------------------------------------------------------------------
-
-def get_panel_bounds(neg_faces):
-    """
-    Return (x_min, x_max, y_min, y_max) world bounds across all negative
-    space faces. Used as the scoring grid extent.
-    """
-    xs = [v.co.x for f in neg_faces for v in f.verts]
-    ys = [v.co.y for f in neg_faces for v in f.verts]
-    return min(xs), max(xs), min(ys), max(ys)
-
-
-def get_floor_z(neg_faces):
-    """Return Z level of the negative space (panel surface Z=0)."""
-    if not neg_faces:
-        return 0.0
-    zs = [v.co.z for f in neg_faces for v in f.verts]
-    return sum(zs) / len(zs)
-
-
-# ---------------------------------------------------------------------------
-# BISECT + GROOVE
-# ---------------------------------------------------------------------------
-
-def bisect_faces(bm, faces, point, normal):
-    """
-    Slice a set of faces along a plane defined by point and normal.
-    Returns updated face list after bisect.
-    Uses bmesh.ops.bisect_plane — cuts cleanly through existing topology.
-    """
-    if not faces:
-        return faces
-
-    geom = faces[:]
-    ret  = bmesh.ops.bisect_plane(
-        bm,
-        geom        = geom,
-        plane_co    = point,
-        plane_no    = normal,
-        clear_inner = False,
-        clear_outer = False,
+def rects_overlap(a, b, margin=1):
+    ar0, ac0, ar1, ac1 = a
+    br0, bc0, br1, bc1 = b
+    return not (
+        ar1 + margin <= br0 or
+        br1 + margin <= ar0 or
+        ac1 + margin <= bc0 or
+        bc1 + margin <= ac0
     )
-    bm.faces.ensure_lookup_table()
-    return ret
 
 
-def collect_strip_faces(bm, normal, cut_a_pos, cut_b_pos, panel_z):
+def resolve_rects(candidate_keys, rng, n_rows, n_cols, coverage,
+                  max_attempts=15):
     """
-    After two parallel bisects, collect the thin face strip between them.
-    Identifies strip faces by their centre position falling between the two cuts.
-    normal is either X or Y axis vector.
+    For a random subset of negative space cells (coverage fraction),
+    attempt to place non-overlapping rectangles.
+    Returns list of (rect, depth) tuples.
     """
-    strip = []
-    for f in bm.faces:
-        if abs(f.normal.z - 1.0) > 0.1:   # only panel surface faces
-            continue
-        centre = f.calc_center_median()
-        # Project centre onto the cut axis
-        proj = centre.dot(normal)
-        if cut_a_pos <= proj <= cut_b_pos:
-            strip.append(f)
-    return strip
+    # Shuffle and take coverage fraction of cells as candidates
+    keys = list(candidate_keys)
+    rng.shuffle(keys)
+    n_candidates = int(len(keys) * coverage)
+    keys = keys[:n_candidates]
+
+    placed = []
+    for key in keys:
+        for _ in range(max_attempts):
+            rect  = pick_rect(key, rng, n_rows, n_cols)
+            depth = rng.choice(PANEL_DEPTHS)
+            if not any(rects_overlap(rect, r) for r, _ in placed):
+                placed.append((rect, depth))
+                break
+
+    return placed
 
 
-def extrude_groove(bm, strip_faces, depth, normal_vec):
-    """
-    Extrude strip faces in -Z to create a visible groove.
-    """
-    if not strip_faces:
-        return
+# ---------------------------------------------------------------------------
+# EXTRUSION
+# ---------------------------------------------------------------------------
 
-    extrude_vec = mathutils.Vector((0.0, 0.0, -abs(depth)))
-    ret         = bmesh.ops.extrude_face_region(bm, geom=strip_faces)
-    new_geom    = ret['geom']
-    new_verts   = [g for g in new_geom if isinstance(g, bmesh.types.BMVert)]
-    new_faces   = [g for g in new_geom if isinstance(g, bmesh.types.BMFace)]
+def extrude_sub_panel(bm, grid, rect, normal, depth):
+    """
+    Extrude a rectangle of negative space faces as a single region.
+
+    Recessed (depth < 0): extrude down, delete top faces — open recess.
+    Proud    (depth > 0): extrude up, keep top faces — raised platform.
+
+    Returns number of faces extruded.
+    """
+    row_start, col_start, row_end, col_end = rect
+
+    faces_to_extrude = []
+    for row in range(row_start, row_end):
+        for col in range(col_start, col_end):
+            f = grid.get((row, col))
+            if f is not None and f.is_valid:
+                faces_to_extrude.append(f)
+
+    if not faces_to_extrude:
+        return 0
+
+    extrude_vec = normal.normalized() * abs(depth)   # always +Z proud
+
+    ret      = bmesh.ops.extrude_face_region(bm, geom=faces_to_extrude)
+    new_geom = ret['geom']
+    new_faces = [g for g in new_geom if isinstance(g, bmesh.types.BMFace)]
+    new_verts = [g for g in new_geom if isinstance(g, bmesh.types.BMVert)]
 
     bmesh.ops.translate(bm, vec=extrude_vec, verts=new_verts)
 
-    # Delete original strip top faces — open the groove
-    bmesh.ops.delete(bm, geom=strip_faces, context='FACES')
+    # Always proud (+Z) — keep original faces as the base,
+    # new top faces form the raised platform surface
+
+    return len(faces_to_extrude)
 
 
 # ---------------------------------------------------------------------------
@@ -160,89 +130,44 @@ def extrude_groove(bm, strip_faces, depth, normal_vec):
 
 def run_step3(obj, bm, face, box_regions, rng, staging_col):
     """
-    Cut scoring grooves across the negative space of the panel.
+    Extrude sub-panels in the negative space.
 
-    Args:
-        obj         : Blender mesh object (panel)
-        bm          : BMesh in edit mode
-        face        : original panel BMFace (used for reference)
-        box_regions : list of box dicts from Step 1
-        rng         : seeded Random instance
-        staging_col : per-panel staging collection (not used — grooves
-                      are cut directly into the panel mesh)
+    Uses negative_space data passed via box_regions context —
+    actually receives negative_space directly from main.py pipeline.
+    Signature kept consistent with other steps.
+
+    NOTE: This step is called with negative_space not box_regions.
+    See main.py run_pipeline() for how it is called.
     """
-    # Refresh bmesh
-    bm.faces.ensure_lookup_table()
-    bm.verts.ensure_lookup_table()
+    # negative_space is passed as box_regions argument from pipeline
+    # (see run_pipeline in main.py)
+    negative_space = box_regions
 
-    # Collect negative space faces — flat panel faces not part of box floors/walls
-    # Identify by normal pointing +Z and at panel surface level (Z ~ 0)
-    neg_faces = [
-        f for f in bm.faces
-        if f.normal.z > 0.9 and abs(f.calc_center_median().z) < 0.01
-    ]
+    cell_keys = negative_space.get('cell_keys', [])
+    grid      = negative_space.get('grid', {})
+    n_rows    = negative_space.get('n_rows', 0)
+    n_cols    = negative_space.get('n_cols', 0)
+    normal    = negative_space.get('normal', mathutils.Vector((0, 0, 1)))
 
-    if not neg_faces:
-        print("    [Step3] No negative space faces found — skipping.")
+    if not cell_keys:
+        print("    [Step3] No negative space cells — skipping.")
         return
 
-    x_min, x_max, y_min, y_max = get_panel_bounds(neg_faces)
-    panel_z = get_floor_z(neg_faces)
+    print(f"    [Step3] {len(cell_keys)} negative space cells  "
+          f"coverage={PANEL_COVERAGE}  depths={PANEL_DEPTHS}")
 
-    x_span = x_max - x_min
-    y_span = y_max - y_min
+    # Resolve non-overlapping sub-panel rectangles
+    rects = resolve_rects(cell_keys, rng, n_rows, n_cols, PANEL_COVERAGE)
+    print(f"    [Step3] {len(rects)} sub-panels resolved.")
 
-    print(f"    [Step3] Panel bounds: X={x_min:.3f}→{x_max:.3f}  "
-          f"Y={y_min:.3f}→{y_max:.3f}  neg_faces={len(neg_faces)}")
+    bm.faces.ensure_lookup_table()
 
-    half_w = SCORE_WIDTH / 2.0
-
-    # --- X-direction grooves (cut planes face Y normal) ---
-    x_positions = generate_cut_positions(x_span, SCORE_CUTS_X,
-                                         SCORE_IRREGULARITY, rng)
-    x_pairs     = make_groove_pairs(x_positions, x_min, half_w)
-
-    x_axis = mathutils.Vector((1.0, 0.0, 0.0))
-    y_axis = mathutils.Vector((0.0, 1.0, 0.0))
-
-    x_grooves = 0
-    for cut_a, cut_b in x_pairs:
-        # Two parallel bisects along X
-        pt_a = mathutils.Vector((cut_a, 0.0, panel_z))
-        pt_b = mathutils.Vector((cut_b, 0.0, panel_z))
-
-        bisect_faces(bm, list(bm.faces), pt_a, x_axis)
-        bm.faces.ensure_lookup_table()
-        bisect_faces(bm, list(bm.faces), pt_b, x_axis)
-        bm.faces.ensure_lookup_table()
-
-        strip = collect_strip_faces(bm, x_axis, cut_a, cut_b, panel_z)
-        if strip:
-            extrude_groove(bm, strip, SCORE_DEPTH, x_axis)
+    extruded = 0
+    for rect, depth in rects:
+        n = extrude_sub_panel(bm, grid, rect, normal, depth)
+        if n > 0:
+            extruded += 1
             bm.faces.ensure_lookup_table()
-            x_grooves += 1
-
-    # --- Y-direction grooves (cut planes face X normal) ---
-    y_positions = generate_cut_positions(y_span, SCORE_CUTS_Y,
-                                         SCORE_IRREGULARITY, rng)
-    y_pairs     = make_groove_pairs(y_positions, y_min, half_w)
-
-    y_grooves = 0
-    for cut_a, cut_b in y_pairs:
-        pt_a = mathutils.Vector((0.0, cut_a, panel_z))
-        pt_b = mathutils.Vector((0.0, cut_b, panel_z))
-
-        bisect_faces(bm, list(bm.faces), pt_a, y_axis)
-        bm.faces.ensure_lookup_table()
-        bisect_faces(bm, list(bm.faces), pt_b, y_axis)
-        bm.faces.ensure_lookup_table()
-
-        strip = collect_strip_faces(bm, y_axis, cut_a, cut_b, panel_z)
-        if strip:
-            extrude_groove(bm, strip, SCORE_DEPTH, y_axis)
-            bm.faces.ensure_lookup_table()
-            y_grooves += 1
 
     bmesh.update_edit_mesh(obj.data)
-
-    print(f"    [Step3] {x_grooves} X-grooves, {y_grooves} Y-grooves cut.")
+    print(f"    [Step3] {extruded} sub-panels extruded.")

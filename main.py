@@ -64,8 +64,8 @@ def run_pipeline(obj, bm, face, panel_seed, staging_col):
     run_step2(obj, bm, face, box_regions, rng, staging_col)
     print("    [Step2] done.")
 
-    # Step 3 — scoring marks
-    run_step3(obj, bm, face, box_regions, rng, staging_col)
+    # Step 3 — sub-panel extrusions in negative space
+    run_step3(obj, bm, face, negative_space, rng, staging_col)
     print("    [Step3] done.")
 
     # Step 4 — interstitial scatter

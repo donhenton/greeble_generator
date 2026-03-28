@@ -417,14 +417,16 @@ def run_step1(obj, bm, face, rng, min_box_size):
     # --- Collect remaining flat faces as negative space ---
     # Refresh after extrusion
     bm.faces.ensure_lookup_table()
-    neg_faces = [
-        grid[key] for key in grid
-        if key not in box_cell_set
-    ]
+    neg_cell_keys = [key for key in grid if key not in box_cell_set]
+    neg_faces     = [grid[key] for key in neg_cell_keys]
 
     negative_space = {
-        'faces' : neg_faces,
-        'normal': normal.copy(),
+        'faces'     : neg_faces,
+        'cell_keys' : neg_cell_keys,   # (row, col) keys for Step 3 grouping
+        'grid'      : grid,            # full grid dict for rect resolution
+        'n_rows'    : n_rows,
+        'n_cols'    : n_cols,
+        'normal'    : normal.copy(),
     }
 
     bmesh.update_edit_mesh(obj.data)
